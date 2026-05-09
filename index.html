@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Reden Recto :: terminal://backend_developer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            scroll-padding-top: 80px;
+        }
+
+        :root {
+            --terminal-bg: #0a0c0f;
+            --terminal-panel: #0b0e12;
+            --green-bright: #4afc7c;
+            --green-dim: #2e7d5e;
+            --cyan: #7af9ff;
+            --cyan-dim: #2d8f8f;
+            --yellow: #fce94f;
+            --orange: #fc9b4f;
+            --red: #ff6b6b;
+            --purple: #c678dd;
+            --white: #eaeef2;
+            --gray: #9aa9b9;
+            --border-glow: rgba(74, 252, 124, 0.2);
+            --glow-green: rgba(74, 252, 124, 0.25);
+        }
+
+        body {
+            background: var(--terminal-bg);
+            font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            color: var(--white);
+            line-height: 1.6;
+            font-size: 15px;
+            padding: 0;
+            margin: 0;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* matrix rain canvas background */
+        #matrix-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            background: #05080c;
+            display: block;
+            opacity: 0.28;
+            pointer-events: none;
+        }
+
+        /* CRT scanlines effect */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.05) 0px, rgba(0, 0, 0, 0.05) 2px, transparent 2px, transparent 6px);
+            pointer-events: none;
+            z-index: 9998;
+        }
+
+        .cursor-blink {
+            display: inline-block;
+            width: 10px;
+            height: 1.2em;
+            background: var(--green-bright);
+            vertical-align: middle;
+            margin-left: 4px;
+            animation: blink 1s step-end infinite;
+            box-shadow: 0 0 4px var(--green-bright);
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0;
+            }
+        }
+
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* terminal header */
+        .terminal-header {
+            background: rgba(11, 14, 18, 0.96);
+            border-bottom: 1px solid #2a322c;
+            padding: 12px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+        }
+
+        .nav-linux {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .prompt {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: var(--green-bright);
+        }
+
+        .prompt-user {
+            color: var(--cyan);
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-menu a {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8rem;
+            text-decoration: none;
+            color: var(--gray);
+            transition: all 0.25s ease;
+            position: relative;
+        }
+
+        .nav-menu a::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 1px;
+            background: var(--green-bright);
+            transition: width 0.3s ease;
+        }
+
+        .nav-menu a:hover::after {
+            width: 100%;
+        }
+
+        .nav-menu a:hover {
+            color: var(--green-bright);
+        }
+
+        .nav-command {
+            font-family: monospace;
+            background: #1e2520;
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            color: var(--green-bright);
+            border: 1px solid #2e4232;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .nav-command:hover {
+            background: var(--green-bright);
+            color: #0a0c0f;
+            box-shadow: 0 0 12px var(--glow-green);
+        }
+
+        /* ===== CONSOLE / TERMINAL SECTION STYLES ===== */
+        section {
+            padding: 60px 0;
+            border-bottom: 1px solid #1a211c;
+        }
+
+        /* each section as a terminal window */
+        .terminal-window {
+            background: rgba(8, 12, 16, 0.85);
+            backdrop-filter: blur(2px);
+            border: 1px solid #2a3a2e;
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .terminal-window:hover {
+            border-color: var(--green-dim);
+            box-shadow: 0 0 20px rgba(74, 252, 124, 0.08);
+        }
+
+        .terminal-titlebar {
+            background: #0d1217;
+            padding: 10px 16px;
+            border-bottom: 1px solid #1e2a24;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: monospace;
+            font-size: 0.7rem;
+            color: var(--gray);
+        }
+
+        .terminal-dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .dot-red {
+            background: #ff5f56;
+        }
+
+        .dot-yellow {
+            background: #ffbd2e;
+        }
+
+        .dot-green {
+            background: #27c93f;
+        }
+
+        .terminal-title {
+            margin-left: 12px;
+            font-family: monospace;
+            font-size: 0.7rem;
+            color: var(--green-dim);
+        }
+
+        .terminal-content {
+            padding: 24px;
+        }
+
+        .section-prefix {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: var(--green-bright);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-prefix::before {
+            content: "$>";
+            color: var(--green-bright);
+            font-weight: 600;
+        }
+
+        h2 {
+            font-family: 'Fira Code', monospace;
+            font-size: 1.6rem;
+            font-weight: 500;
+            letter-spacing: -1px;
+            margin-bottom: 24px;
+            color: var(--cyan);
+        }
+
+        /* command line style for text */
+        .cmd-line {
+            color: var(--green-bright);
+            font-family: monospace;
+            font-size: 0.8rem;
+            margin-bottom: 12px;
+        }
+
+        .cmd-output {
+            color: var(--gray);
+            margin-bottom: 16px;
+            padding-left: 20px;
+            border-left: 2px solid var(--green-dim);
+        }
+
+        /* hero inside terminal */
+        .hero-terminal {
+            min-height: 85vh;
+            display: flex;
+            align-items: center;
+            padding: 40px 0;
+        }
+
+        .hero-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 40px;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .hero-content {
+            flex: 2;
+            min-width: 260px;
+        }
+
+        .hero-image {
+            flex: 1;
+            min-width: 200px;
+            text-align: center;
+        }
+
+        .image-placeholder {
+            background: #0f1419;
+            border: 1px solid var(--border-glow);
+            border-radius: 16px;
+            padding: 20px 12px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .image-placeholder:hover {
+            border-color: var(--green-bright);
+            box-shadow: 0 0 28px var(--glow-green);
+            transform: translateY(-3px);
+        }
+
+        .ascii-avatar {
+            font-family: monospace;
+            font-size: 0.7rem;
+            color: var(--cyan);
+            background: #0c0f12;
+            padding: 20px 8px;
+            border-radius: 12px;
+            white-space: pre;
+            line-height: 1.2;
+            overflow-x: auto;
+        }
+
+        .img-alt-text {
+            margin-top: 16px;
+            font-size: 0.7rem;
+            color: var(--gray);
+            border-top: 1px dashed #2a3a2e;
+            padding-top: 12px;
+        }
+
+        .hero-name-linux {
+            font-family: monospace;
+            font-size: clamp(2rem, 6vw, 3.5rem);
+            font-weight: 600;
+            margin: 16px 0 8px;
+        }
+
+        .hero-name-linux .green-text {
+            color: var(--green-bright);
+        }
+
+        .typed-roles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 16px 0;
+        }
+
+        .typed-roles span {
+            background: #18222c;
+            padding: 4px 12px;
+            border-radius: 24px;
+            font-size: 0.75rem;
+            color: var(--cyan);
+            transition: all 0.2s;
+        }
+
+        .typed-roles span:hover {
+            background: var(--green-bright);
+            color: #0a0c0f;
+        }
+
+        .hero-desc-linux {
+            color: var(--gray);
+            max-width: 600px;
+            margin: 20px 0 28px;
+            line-height: 1.6;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .btn-term {
+            background: transparent;
+            border: 1px solid var(--green-bright);
+            padding: 8px 20px;
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: var(--green-bright);
+            cursor: pointer;
+            border-radius: 30px;
+            transition: all 0.25s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-term:hover {
+            background: var(--green-bright);
+            color: #0a0c0f;
+            box-shadow: 0 0 12px var(--glow-green);
+            transform: translateY(-2px);
+        }
+
+        .btn-term-outline {
+            border-color: var(--gray);
+            color: var(--gray);
+        }
+
+        .btn-term-outline:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+
+        /* stats cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .stat-card-term {
+            background: #0b0f13;
+            border: 1px solid #25302a;
+            padding: 16px;
+            border-radius: 10px;
+            text-align: center;
+            transition: all 0.25s ease;
+        }
+
+        .stat-card-term:hover {
+            border-color: var(--green-bright);
+            transform: translateY(-3px);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--cyan);
+            font-family: monospace;
+        }
+
+        /* skills grid */
+        .skills-grid-term {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .skill-card-term {
+            background: #0b0e12;
+            border: 1px solid #202924;
+            padding: 18px;
+            border-radius: 10px;
+            transition: all 0.25s ease;
+        }
+
+        .skill-card-term:hover {
+            border-left: 3px solid var(--green-bright);
+            transform: translateX(4px);
+        }
+
+        .skill-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--cyan);
+        }
+
+        .skill-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .skill-tag {
+            font-size: 0.65rem;
+            background: #16201b;
+            color: var(--green-dim);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-family: monospace;
+            border: 1px solid #2c3a32;
+        }
+
+        /* timeline / experience */
+        .timeline-term {
+            border-left: 1px solid #2a4232;
+            margin-left: 12px;
+            padding-left: 28px;
+        }
+
+        .timeline-node {
+            margin-bottom: 36px;
+            position: relative;
+        }
+
+        .timeline-node::before {
+            content: "$";
+            position: absolute;
+            left: -36px;
+            top: 0;
+            color: var(--green-bright);
+            background: var(--terminal-bg);
+            padding: 0 4px;
+        }
+
+        .timeline-meta {
+            color: var(--cyan);
+            font-size: 0.7rem;
+            font-family: monospace;
+        }
+
+        .timeline-title {
+            font-weight: 600;
+            margin: 6px 0 4px;
+            color: var(--white);
+        }
+
+        .timeline-company {
+            color: var(--green-dim);
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+        }
+
+        .timeline-node ul {
+            list-style: none;
+        }
+
+        .timeline-node ul li {
+            color: var(--gray);
+            margin-left: 16px;
+            position: relative;
+            padding-left: 12px;
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+        }
+
+        .timeline-node ul li::before {
+            content: "›";
+            position: absolute;
+            left: 0;
+            color: var(--green-bright);
+        }
+
+        /* projects grid */
+        .projects-grid-term {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .project-card-term {
+            background: #0b0e12;
+            border: 1px solid #1e2a24;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .project-card-term:hover {
+            border-color: var(--green-bright);
+            transform: translateY(-4px);
+        }
+
+        .project-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--cyan);
+        }
+
+        .project-desc {
+            font-size: 0.75rem;
+            color: var(--gray);
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+
+        /* infra badges */
+        .infra-track-term {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .infra-badge-term {
+            background: #0e1418;
+            border: 1px solid #2a3a2e;
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            font-family: monospace;
+            color: var(--gray);
+            transition: all 0.2s;
+        }
+
+        .infra-badge-term:hover {
+            border-color: var(--green-bright);
+            color: var(--green-bright);
+        }
+
+        /* contact section */
+        .contact-grid-term {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            justify-content: space-between;
+        }
+
+        .contact-info-term {
+            flex: 1;
+        }
+
+        .contact-links-term a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--gray);
+            font-family: monospace;
+            padding: 10px 0;
+            border-bottom: 1px dashed #2a3a2e;
+            transition: all 0.25s ease;
+        }
+
+        .contact-links-term a:hover {
+            color: var(--green-bright);
+            padding-left: 8px;
+            border-bottom-color: var(--green-bright);
+        }
+
+        .form-term {
+            flex: 1;
+            background: #090c10;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #232e28;
+        }
+
+        input,
+        textarea {
+            background: #05080c;
+            border: 1px solid #2e3a32;
+            padding: 10px 12px;
+            width: 100%;
+            border-radius: 8px;
+            color: var(--white);
+            font-family: monospace;
+            margin-top: 4px;
+            margin-bottom: 14px;
+            transition: all 0.2s;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--green-bright);
+            box-shadow: 0 0 6px var(--glow-green);
+        }
+
+        footer {
+            text-align: center;
+            padding: 32px;
+            font-size: 0.7rem;
+            color: #3a4740;
+            border-top: 1px solid #1a241f;
+        }
+
+        .scroll-top-term {
+            position: fixed;
+            bottom: 2rem;
+            right: 1.5rem;
+            background: #11171c;
+            border: 1px solid var(--green-bright);
+            border-radius: 30px;
+            padding: 8px 14px;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.3s ease;
+            pointer-events: none;
+            z-index: 1000;
+            color: var(--green-bright);
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+
+        .scroll-top-term.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .scroll-top-term:hover {
+            background: var(--green-bright);
+            color: #0a0c0f;
+            transform: translateY(-3px);
+        }
+
+        .reveal {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.6s ease, transform 0.5s ease;
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (max-width: 760px) {
+            .container {
+                padding: 0 16px;
+            }
+
+            .hero-grid {
+                flex-direction: column-reverse;
+            }
+
+            .nav-menu {
+                gap: 1rem;
+                flex-wrap: wrap;
+            }
+
+            .terminal-content {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <canvas id="matrix-canvas"></canvas>
+
+    <div class="terminal-header">
+        <div class="container">
+            <div class="nav-linux">
+                <div class="prompt">
+                    <span class="prompt-user">user@recto</span>:<span style="color:var(--white);">~</span>$ <span
+                        class="cursor-blink"></span>
+                </div>
+                <ul class="nav-menu">
+                    <li><a href="#about">about</a></li>
+                    <li><a href="#skills">skills</a></li>
+                    <li><a href="#experience">experience</a></li>
+                    <li><a href="#projects">projects</a></li>
+                    <li><a href="#infra">infra</a></li>
+                    <li><a href="#contact">contact</a></li>
+                </ul>
+                <a href="#contact" class="nav-command">./connect.sh</a>
+            </div>
+        </div>
+    </div>
+
+    <main class="container">
+        <!-- HERO SECTION -->
+        <section id="hero" class="hero-terminal">
+            <div class="hero-grid">
+                <div class="hero-content">
+                    <div class="cmd-line">┌─[user@recto:~/portfolio]</div>
+                    <div class="cmd-line">└─$ whoami</div>
+                    <div class="hero-name-linux">
+                        Reden Rudolf <span class="green-text">Recto</span>
+                    </div>
+                    <div class="typed-roles">
+                        <span>backend_engineer</span>
+                        <span>laravel_specialist</span>
+                        <span>jPOS_architect</span>
+                        <span>cloud_infra</span>
+                    </div>
+                    <p class="hero-desc-linux">
+                        <span class="cmd-line">$></span> Building secure, scalable backend systems & APIs. Passionate
+                        about transaction processing,
+                        Linux servers, and clean code.
+                        <span style="color:var(--cyan);"> [open for collaboration]</span>
+                    </p>
+                    <div class="btn-group">
+                        <a href="#projects" class="btn-term">$ view_projects</a>
+                        <a href="#contact" class="btn-term btn-term-outline">$ send_message</a>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <div class="image-placeholder">
+                        <div class="ascii-avatar">
+                            <pre style="margin:0; font-size:11px;">   ╭┳╮╭┳╮╭┳╮
+   ┃ █ ┃ █ ┃ █ ┃
+   ╰━━━╯━━━╯
+   [   USER  ]   
+   > backend::v1</pre>
+                        </div>
+                        <div class="img-alt-text">
+                            📸 [PLACEHOLDER] — profile image slot<br>
+                            <span style="font-size:0.65rem;">&lt; upload your photo / avatar &gt;</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ABOUT SECTION as Terminal Window -->
+        <section id="about">
+            <div class="terminal-window reveal">
+                <div class="terminal-titlebar">
+                    <div class="terminal-dots">
+                        <div class="terminal-dot dot-red"></div>
+                        <div class="terminal-dot dot-yellow"></div>
+                        <div class="terminal-dot dot-green"></div>
+                    </div>
+                    <div class="terminal-title">user@recto:~/about</div>
+                </div>
+                <div class="terminal-content">
+                    <div class="section-prefix">whoami --profile</div>
+                    <h2>~ About me</h2>
+                    <div style="display: flex; flex-wrap: wrap; gap: 30px;">
+                        <div style="flex: 2;">
+                            <div class="cmd-line">$ cat about.md</div>
+                            <div class="cmd-output">
+                                I am a backend developer and systems architect with expertise in Laravel, PHP, MySQL,
+                                jPOS transaction engines, and cloud infrastructure (AWS/Linux). I thrive on building
+                                high-performance APIs, automating operational workflows, and securing financial
+                                transaction pipelines.
+                            </div>
+                            <div class="cmd-line">$ skills --highlights</div>
+                            <div class="cmd-output">
+                                ✔ 6+ years of combined stack mastery<br>
+                                ✔ jPOS & ISO8583 processing<br>
+                                ✔ Secure PGP encryption & file transfers
+                            </div>
+                        </div>
+                        <div class="stats-grid" style="flex: 1;">
+                            <div class="stat-card-term">
+                                <div class="stat-number">10+</div>
+                                <div>projects shipped</div>
+                            </div>
+                            <div class="stat-card-term">
+                                <div class="stat-number">6+</div>
+                                <div>frameworks</div>
+                            </div>
+                            <div class="stat-card-term">
+                                <div class="stat-number">100%</div>
+                                <div>automation focus</div>
+                            </div>
+                            <div class="stat-card-term">
+                                <div class="stat-number">jPOS</div>
+                                <div>transaction expert</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SKILLS SECTION -->
+        <section id="skills">
+            <div class="terminal-window reveal">
+                <div class="terminal-titlebar">
+                    <div class="terminal-dots">
+                        <div class="terminal-dot dot-red"></div>
+                        <div class="terminal-dot dot-yellow"></div>
+                        <div class="terminal-dot dot-green"></div>
+                    </div>
+                    <div class="terminal-title">user@recto:~/skills</div>
+                </div>
+                <div class="terminal-content">
+                    <div class="section-prefix">tech_stack --list</div>
+                    <h2>/usr/bin/skills</h2>
+                    <div class="skills-grid-term">
+                        <div class="skill-card-term">
+                            <div class="skill-title">⚙️ Backend Core</div>
+                            <div class="skill-tags"><span class="skill-tag">Laravel</span><span
+                                    class="skill-tag">PHP8</span><span class="skill-tag">REST API</span><span
+                                    class="skill-tag">jPOS</span><span class="skill-tag">MySQL/PgSQL</span></div>
+                        </div>
+                        <div class="skill-card-term">
+                            <div class="skill-title">📱 Mobile & Tools</div>
+                            <div class="skill-tags"><span class="skill-tag">Flutter</span><span
+                                    class="skill-tag">Swift</span><span class="skill-tag">C#</span><span
+                                    class="skill-tag">Git</span></div>
+                        </div>
+                        <div class="skill-card-term">
+                            <div class="skill-title">🎨 Frontend</div>
+                            <div class="skill-tags"><span class="skill-tag">HTML/CSS</span><span
+                                    class="skill-tag">JavaScript</span><span class="skill-tag">Responsive</span></div>
+                        </div>
+                        <div class="skill-card-term">
+                            <div class="skill-title">☁️ Cloud & DevOps</div>
+                            <div class="skill-tags"><span class="skill-tag">AWS EC2</span><span class="skill-tag">Linux
+                                    admin</span><span class="skill-tag">Nginx/Apache</span><span
+                                    class="skill-tag">Deployments</span></div>
+                        </div>
+                        <div class="skill-card-term">
+                            <div class="skill-title">🔐 Security & Ops</div>
+                            <div class="skill-tags"><span class="skill-tag">PGP/GPG</span><span class="skill-tag">System
+                                    monitoring</span><span class="skill-tag">DB hardening</span></div>
+                        </div>
+                        <div class="skill-card-term">
+                            <div class="skill-title">📊 Reporting</div>
+                            <div class="skill-tags"><span class="skill-tag">Excel advanced</span><span
+                                    class="skill-tag">Pivot tables</span><span class="skill-tag">Automated
+                                    reports</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- EXPERIENCE SECTION -->
+        <section id="experience">
+            <div class="terminal-window reveal">
+                <div class="terminal-titlebar">
+                    <div class="terminal-dots">
+                        <div class="terminal-dot dot-red"></div>
+                        <div class="terminal-dot dot-yellow"></div>
+                        <div class="terminal-dot dot-green"></div>
+                    </div>
+                    <div class="terminal-title">user@recto:~/experience</div>
+                </div>
+                <div class="terminal-content">
+                    <div class="section-prefix">work_history --since 2020</div>
+                    <h2>~/.experience</h2>
+                    <div class="timeline-term">
+                        <div class="timeline-node">
+                            <div class="timeline-meta">2022 — Present</div>
+                            <div class="timeline-title">Operations & Reporting Staff</div>
+                            <div class="timeline-company">@ fintech solutions</div>
+                            <ul>
+                                <li>Prepared daily transaction reports for banks & partners</li>
+                                <li>Developed automated reporting dashboards (Laravel + MySQL)</li>
+                                <li>Maintained server logs & ensured PGP encrypted transfers</li>
+                                <li>Optimized data validation workflows & reduced manual effort by 40%</li>
+                            </ul>
+                        </div>
+                        <div class="timeline-node">
+                            <div class="timeline-meta">2020 — 2022</div>
+                            <div class="timeline-title">Junior Backend Developer</div>
+                            <div class="timeline-company">@ digital core inc.</div>
+                            <ul>
+                                <li>Built REST APIs for cooperative management system</li>
+                                <li>Integrated jPOS for card transaction simulation</li>
+                                <li>Deployed applications on AWS EC2 & managed Linux VMs</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- PROJECTS SECTION -->
+        <section id="projects">
+            <div class="terminal-window reveal">
+                <div class="terminal-titlebar">
+                    <div class="terminal-dots">
+                        <div class="terminal-dot dot-red"></div>
+                        <div class="terminal-dot dot-yellow"></div>
+                        <div class="terminal-dot dot-green"></div>
+                    </div>
+                    <div class="terminal-title">user@recto:~/projects</div>
+                </div>
+                <div class="terminal-content">
+                    <div class="section-prefix">ls -la projects/</div>
+                    <h2>repositories -- showcase</h2>
+                    <div class="projects-grid-term">
+                        <div class="project-card-term">
+                            <div class="project-title">🎓 Faculty Monitoring (QR)</div>
+                            <div class="project-desc">QR-based attendance with auto reports & scheduling dashboard.
+                                Laravel + MySQL.</div>
+                            <div class="skill-tags"><span class="skill-tag">Laravel</span><span
+                                    class="skill-tag">PHP</span><span class="skill-tag">QR generator</span></div>
+                        </div>
+                        <div class="project-card-term">
+                            <div class="project-title">📦 Inventory Management API</div>
+                            <div class="project-desc">Complete product lifecycle, monitoring dashboards, role-based
+                                access.</div>
+                            <div class="skill-tags"><span class="skill-tag">PHP</span><span
+                                    class="skill-tag">Bootstrap</span><span class="skill-tag">MySQL</span></div>
+                        </div>
+                        <div class="project-card-term">
+                            <div class="project-title">🤝 Cooperative REST API</div>
+                            <div class="project-desc">Robust CRUD + JSON auth endpoints for beneficiaries & employees.
+                            </div>
+                            <div class="skill-tags"><span class="skill-tag">RESTful</span><span
+                                    class="skill-tag">JWT</span><span class="skill-tag">MySQL</span></div>
+                        </div>
+                        <div class="project-card-term">
+                            <div class="project-title">💳 jPOS Transaction Engine</div>
+                            <div class="project-desc">ISO8583 message handling, logging, secure communication with
+                                PostgreSQL.</div>
+                            <div class="skill-tags"><span class="skill-tag">jPOS</span><span
+                                    class="skill-tag">Java</span><span class="skill-tag">Linux</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- INFRASTRUCTURE SECTION -->
+        <section id="infra">
+            <div class="terminal-window reveal">
+                <div class="terminal-titlebar">
+                    <div class="terminal-dots">
+                        <div class="terminal-dot dot-red"></div>
+                        <div class="terminal-dot dot-yellow"></div>
+                        <div class="terminal-dot dot-green"></div>
+                    </div>
+                    <div class="terminal-title">user@recto:~/infra</div>
+                </div>
+                <div class="terminal-content">
+                    <div class="section-prefix">systemctl status infra</div>
+                    <h2>Server & Cloud Toolchain</h2>
+                    <div class="infra-track-term">
+                        <span class="infra-badge-term">AWS EC2</span><span class="infra-badge-term">Ubuntu/Debian</span>
+                        <span class="infra-badge-term">Nginx config</span><span class="infra-badge-term">Apache2</span>
+                        <span class="infra-badge-term">VMware/VirtualBox</span><span class="infra-badge-term">Git
+                            workflows</span>
+                        <span class="infra-badge-term">SSL/TLS</span><span class="infra-badge-term">Fail2ban</span>
+                        <span class="infra-badge-term">Docker basics</span><span class="infra-badge-term">Cron
+                            automation</span>
+                        <span class="infra-badge-term">Performance tuning</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CONTACT SECTION -->
+        <section id="contact">
+            <div class="terminal-window reveal">
+                <div class="terminal-titlebar">
+                    <div class="terminal-dots">
+                        <div class="terminal-dot dot-red"></div>
+                        <div class="terminal-dot dot-yellow"></div>
+                        <div class="terminal-dot dot-green"></div>
+                    </div>
+                    <div class="terminal-title">user@recto:~/contact</div>
+                </div>
+                <div class="terminal-content">
+                    <div class="section-prefix">./contact --email</div>
+                    <h2>Get in touch</h2>
+                    <div class="contact-grid-term">
+                        <div class="contact-info-term">
+                            <div class="cmd-line">$ echo "Let's build something robust" | mail -s 'collab'</div>
+                            <div class="contact-links-term">
+                                <a href="mailto:reden.r@example.com">📧 reden.r@backend.dev</a>
+                                <a href="tel:+639123456789">📱 +63 912 345 6789</a>
+                                <a href="#">🐙 github.com/reden_recto</a>
+                                <a href="#">💼 linkedin.com/in/reden-recto</a>
+                            </div>
+                            <div
+                                style="margin-top: 24px; background:#0b0f13; border-radius:10px; padding:12px; border:1px solid #25302a;">
+                                <span style="color:var(--green-dim);">$ gpg --verify</span><br>
+                                <span style="font-size:0.7rem;">PGP fingerprint: 3A4F 8C2B 1E90 77FA ● secure comms
+                                    ready</span>
+                            </div>
+                        </div>
+                        <div class="form-term">
+                            <div class="cmd-line">// quick_message</div>
+                            <input type="text" placeholder="name" id="msgName">
+                            <input type="email" placeholder="email@domain.com" id="msgEmail">
+                            <textarea rows="3" placeholder="> write your proposal..."></textarea>
+                            <button class="btn-term" id="fakeSendBtn"
+                                style="width:100%; justify-content:center;">send_message() →</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div>© 2025 Reden Rudolf Recto | <span style="color:var(--green-dim);">built with vim, ♥ & coffee</span> | <span
+                id="heartClick" style="cursor:pointer;">♥</span> terminal://active</div>
+    </footer>
+
+    <button class="scroll-top-term" id="scrollTopBtn">↑ scroll_up</button>
+
+    <script>
+        // MATRIX RAIN
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+
+        const chars = "01アイウエオカキクケコ10$#%&";
+        const charArray = chars.split('');
+        const fontSize = 18;
+        const columns = Math.floor(width / fontSize);
+        let drops = [];
+        for (let i = 0; i < columns; i++) drops[i] = Math.floor(Math.random() * -height / 2);
+
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(5, 8, 12, 0.045)';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#4afc7c';
+            ctx.font = fontSize + 'px "Fira Code", monospace';
+            for (let i = 0; i < drops.length; i++) {
+                const text = charArray[Math.floor(Math.random() * charArray.length)];
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+                if (drops[i] * fontSize > height && Math.random() > 0.975) drops[i] = 0;
+                drops[i]++;
+            }
+            requestAnimationFrame(drawMatrix);
+        }
+        drawMatrix();
+
+        window.addEventListener('resize', () => {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            const newCols = Math.floor(width / fontSize);
+            drops.length = newCols;
+            for (let i = 0; i < newCols; i++) if (drops[i] === undefined) drops[i] = Math.floor(Math.random() * -height / 2);
+        });
+
+        // scroll reveal
+        const reveals = document.querySelectorAll('.reveal');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+        reveals.forEach(r => observer.observe(r));
+
+        // scroll to top
+        const scrollBtn = document.getElementById('scrollTopBtn');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 400) scrollBtn.classList.add('visible');
+            else scrollBtn.classList.remove('visible');
+        });
+        scrollBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+        // fake send button
+        const sendBtn = document.getElementById('fakeSendBtn');
+        sendBtn.addEventListener('click', function () {
+            const originalText = sendBtn.innerText;
+            sendBtn.innerText = '✓ message_sent [demo]';
+            sendBtn.style.background = '#2e7d5e';
+            setTimeout(() => {
+                sendBtn.innerText = originalText;
+                sendBtn.style.background = 'transparent';
+            }, 2000);
+        });
+
+        // heart animation
+        const heart = document.getElementById('heartClick');
+        heart.addEventListener('click', () => {
+            heart.style.transform = 'scale(1.3)';
+            heart.style.color = '#ff6b6b';
+            setTimeout(() => { heart.style.transform = ''; heart.style.color = ''; }, 300);
+        });
+
+        // active nav highlight
+        const sections = document.querySelectorAll('section[id]');
+        const navItems = document.querySelectorAll('.nav-menu a');
+        const secObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const id = entry.target.getAttribute('id');
+                    navItems.forEach(link => {
+                        link.style.color = '';
+                        if (link.getAttribute('href') === '#' + id) {
+                            link.style.color = '#4afc7c';
+                            link.style.textShadow = '0 0 2px #4afc7c';
+                        } else {
+                            link.style.textShadow = '';
+                        }
+                    });
+                }
+            });
+        }, { threshold: 0.4 });
+        sections.forEach(sec => secObserver.observe(sec));
+    </script>
+</body>
+
+</html>
